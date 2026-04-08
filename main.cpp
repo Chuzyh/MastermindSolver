@@ -44,7 +44,7 @@ static constexpr bool shouldPlaySingleGame = true;
 template <typename T>
 using SingleGameSolver = DefaultSolver<T>;
 using SingleGameAlgo = Algos::Knuth;
-static constexpr uint8_t singleGamePinCount = 4;    // 1-8, 4 is classic
+static constexpr uint8_t singleGamePinCount = 5;    // 1-8, 4 is classic
 static constexpr uint8_t singleGameColorCount = 6;  // 1-15, 6 is classic
 static constexpr bool singleGameLog = true;
 
@@ -235,6 +235,7 @@ void runSingleSolver(StatsRecorder& statsRecorder, json& validSolutions, uint32_
   }
 
   auto elapsed = solver.playAllGames(packedInitialGuess);
+  solver.sampleSomeGames(2000);
 
   cout << endl;
 

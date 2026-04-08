@@ -10,6 +10,7 @@
 #include <limits>
 #include <ranges>
 #include <span>
+#include <fstream>
 
 #include "utils.hpp"
 
@@ -163,6 +164,49 @@ std::chrono::nanoseconds SolverCPUFaster<SolverConfig>::playAllGames(uint32_t pa
   return endTime - startTime;
 }
 
+template <typename SolverConfig>
+void SolverCPUFaster<SolverConfig>::sampleSomeGames(const int numGames) {
+  auto all = CodewordT::getAllCodewords();
+
+  std::vector<int> picked;
+  for (int i = 0; i < numGames; i++) {
+    picked.push_back(rand() % all.size());
+  }
+
+  std::ofstream out("trace.json");
+  out << "{\"games\":["<<std::endl;
+
+  for (int g = 0; g < picked.size(); g++) {
+    int idx = picked[g];
+
+    out << "{\"secret\":\"" << all[idx].toString() << "\",\"trace\":["<<endl;
+
+    bool first = true;
+
+    for (int t = 0; t < nextMovesList.size(); t++) {
+      auto guess = nextMovesList[t][idx];
+      if (guess.isInvalid()) break;
+
+      auto s = all[idx].score(guess);
+      uint8_t b = (s.result >> 4) & 0x0F;
+      uint8_t w = s.result & 0x0F;
+
+      if (!first) out << ",";
+      first = false;
+
+      out << "{\"turn\":" << t
+          << ",\"guess\":\"" << guess.toString()
+          << "\",\"score\":{\"correct_positions\":" << (int)b
+          << ",\"wrong_positions\":" << (int)w << "}}" << endl;
+    }
+
+    out << "]}";
+
+    if (g + 1 != picked.size()) out << ",";
+  }
+
+  out << "]}";
+}
 // These algorithms all rely on splitting the remaining possible guesses into groups or subsets based on their scores
 // vs each other.
 //

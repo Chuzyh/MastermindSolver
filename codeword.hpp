@@ -24,7 +24,11 @@ class Codeword {
   // TODO: improve the CPU version to handle smaller color counts
   using CT = unsigned __int128;
 #endif
-
+  std::string toString() const {
+    std::ostringstream oss;
+    dump(oss);
+    return oss.str();
+  }
   CUDA_HOST_AND_DEVICE constexpr Codeword() noexcept : codeword(0xFFFFFFFF), colorCounts(0) {}
 
   constexpr Codeword(uint32_t codeword) noexcept : codeword(codeword), colorCounts(computeColorCounts(codeword)) {}
