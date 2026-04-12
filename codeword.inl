@@ -124,7 +124,7 @@ Score Codeword<PIN_COUNT, COLOR_COUNT>::scoreCountingAutoVec(const Codeword &gue
   int allHits = 0;
   auto *scc = (uint8_t *)&(this->colorCounts);
   auto *gcc = (uint8_t *)&(guess.colorCounts);
-  for (int i = 0; i < 16; i++) {
+  for (size_t i = 0; i < sizeof(this->colorCounts); i++) {
     allHits += std::min(scc[i], gcc[i]);
   }
 
@@ -140,38 +140,60 @@ Score Codeword<PIN_COUNT, COLOR_COUNT>::scoreCountingAutoVec(const Codeword &gue
 template <uint8_t PIN_COUNT, uint8_t COLOR_COUNT>
 Score Codeword<PIN_COUNT, COLOR_COUNT>::scoreCountingHandVec(const Codeword &guess) const {
   constexpr static uint32_t unusedPinsMask = (uint32_t)(0xFFFFFFFFlu << (PIN_COUNT * 4u));
-  uint32_t v = this->codeword ^ guess.codeword;  // Matched pins are now 0.
-  v |= unusedPinsMask;                           // Ensure that any unused pin positions are non-zero.
-  uint32_t r = ~((((v & 0x77777777u) + 0x77777777u) | v) | 0x77777777u);  // Yields 1 bit per matched pin
+  uint32_t v = this->codeword ^ guess.codeword;
+  v |= unusedPinsMask;
+  uint32_t r = ~((((v & 0x77777777u) + 0x77777777u) | v) | 0x77777777u);
   uint8_t b = __builtin_popcount(r);
 
 #if defined(__x86_64__)
-  // Load the 128-bit color counts into vector registers. Each one is 16 8-bit counters.
-  __m128i_u secretColorsVec = _mm_loadu_si128((__m128i_u *)&this->colorCounts);
-  __m128i_u guessColorsVec = _mm_loadu_si128((__m128i_u *)&guess.colorCounts);
+  int allHits = 0;
 
-  // Find the minimum of each pair of 8-bit counters in one instruction.
-  __m128i_u minColorsVec = _mm_min_epu8(secretColorsVec, guessColorsVec);
+  if constexpr (sizeof(this->colorCounts) == 8) {
+    // 只读 64 bit
+    __m128i secretColorsVec = _mm_cvtsi64_si128((long long)this->colorCounts);
+    __m128i guessColorsVec  = _mm_cvtsi64_si128((long long)guess.colorCounts);
 
-  // Add up all of the 8-bit counters into two 16-bit sums in one instruction.
-  __m128i vsum = _mm_sad_epu8(minColorsVec, _mm_setzero_si128());
+    __m128i minColorsVec = _mm_min_epu8(secretColorsVec, guessColorsVec);
+    __m128i vsum = _mm_sad_epu8(minColorsVec, _mm_setzero_si128());
 
-  // Pull out the two 16-bit sums and add them together normally to get our final answer. 3 instructions.
-  int allHits = _mm_extract_epi16(vsum, 0) + _mm_extract_epi16(vsum, 4);
+    allHits = _mm_extract_epi16(vsum, 0);
+  } else {
+    static_assert(sizeof(this->colorCounts) == 16);
+
+    __m128i_u secretColorsVec = _mm_loadu_si128((const __m128i_u *)&this->colorCounts);
+    __m128i_u guessColorsVec  = _mm_loadu_si128((const __m128i_u *)&guess.colorCounts);
+
+    __m128i minColorsVec = _mm_min_epu8(secretColorsVec, guessColorsVec);
+    __m128i vsum = _mm_sad_epu8(minColorsVec, _mm_setzero_si128());
+
+    allHits = _mm_extract_epi16(vsum, 0) + _mm_extract_epi16(vsum, 4);
+  }
 #endif
 
 #if (__ARM_NEON__)
-  // Load the 128-bit color counts into vector registers. Each one is 16 8-bit counters.
-  uint8x16_t secretColorsVec = vld1q_u8(reinterpret_cast<const unsigned char *>(&this->colorCounts));
-  uint8x16_t guessColorsVec = vld1q_u8(reinterpret_cast<const unsigned char *>(&guess.colorCounts));
+  int allHits = 0;
 
-  // Find the minimum of each pair of 8-bit counters in one instruction.
-  uint8x16_t minColorsVec = vminq_u8(secretColorsVec, guessColorsVec);
+  if constexpr (sizeof(this->colorCounts) == 8) {
+    uint8x8_t secretColorsVec =
+        vld1_u8(reinterpret_cast<const unsigned char *>(&this->colorCounts));
+    uint8x8_t guessColorsVec =
+        vld1_u8(reinterpret_cast<const unsigned char *>(&guess.colorCounts));
 
-  // Fun fact: the pairwise sum and the final sum are faster than a single vaddvq_u8 over the whole vector.
-  // Pairwise add bytes into 16-bit sums, then sum the 16-bit values into a single scalar.
-  uint16x8_t pairwiseSum16 = vpaddlq_u8(minColorsVec);
-  int allHits = vaddvq_u16(pairwiseSum16);
+    uint8x8_t minColorsVec = vmin_u8(secretColorsVec, guessColorsVec);
+    uint16x8_t widened = vmovl_u8(minColorsVec);
+    allHits = vaddvq_u16(widened);
+  } else {
+    static_assert(sizeof(this->colorCounts) == 16);
+
+    uint8x16_t secretColorsVec =
+        vld1q_u8(reinterpret_cast<const unsigned char *>(&this->colorCounts));
+    uint8x16_t guessColorsVec =
+        vld1q_u8(reinterpret_cast<const unsigned char *>(&guess.colorCounts));
+
+    uint8x16_t minColorsVec = vminq_u8(secretColorsVec, guessColorsVec);
+    uint16x8_t pairwiseSum16 = vpaddlq_u8(minColorsVec);
+    allHits = vaddvq_u16(pairwiseSum16);
+  }
 #endif
 
   return Score(b, allHits - b);

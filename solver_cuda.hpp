@@ -52,6 +52,7 @@ class SolverCUDA : public Solver {
 
   std::chrono::nanoseconds playAllGames(uint32_t packedInitialGuess) override;
 
+  void sampleSomeGames(const int numGames);
   bool usesGPU() const override { return true; }
 
   void dump() override;

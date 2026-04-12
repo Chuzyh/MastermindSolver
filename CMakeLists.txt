@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.25.2)
-project(mastermind)
+project(mastermind LANGUAGES CXX CUDA)
+find_package(CUDAToolkit REQUIRED)
 
 execute_process(
         COMMAND git rev-parse --abbrev-ref HEAD
@@ -31,7 +32,6 @@ set(MASTERMIND_SOURCES_LIST
         ${PROJECT_SOURCE_DIR}/main.cpp
         ${PROJECT_SOURCE_DIR}/score.cpp
         ${PROJECT_SOURCE_DIR}/utils.cpp
-        ${PROJECT_SOURCE_DIR}/codeword.inl
         )
 
 add_executable(mastermind ${MASTERMIND_SOURCES_LIST})
@@ -74,13 +74,13 @@ check_language(CUDA)
 
 if (CMAKE_CUDA_COMPILER)
     enable_language(CUDA)
-    set_source_files_properties(${MASTERMIND_SOURCES_LIST} PROPERTIES LANGUAGE CUDA)
+    set_source_files_properties(main.cpp PROPERTIES LANGUAGE CUDA)
     set_target_properties(mastermind PROPERTIES
             CXX_STANDARD 20
             CUDA_STANDARD 20
             CUDA_STANDARD_REQUIRED ON
             CUDA_SEPARABLE_COMPILATION ON
-            CUDA_ARCHITECTURES "86")
+            CUDA_ARCHITECTURES "89")
     target_compile_options(mastermind PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
             --generate-line-info
             --use_fast_math

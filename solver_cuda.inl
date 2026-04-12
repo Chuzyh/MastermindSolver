@@ -23,7 +23,7 @@
 #include <cassert>
 #include <cub/cub.cuh>
 #include <cuda/barrier>
-#include <cuda/functional>
+#include <cuda/std/functional>
 #include <new>
 #include <vector>
 
@@ -98,7 +98,50 @@ __device__ uint scoreCodewords(const uint32_t secret, const uint4 secretColors, 
 
   return ((b * (2 * SolverConfig::PIN_COUNT + 1 - b)) / 2) + allHits;
 }
+template <typename SolverConfig>
+void SolverCUDA<SolverConfig>::sampleSomeGames(const int numGames) {
+  auto all = CodewordT::getAllCodewords();
 
+  std::vector<int> picked;
+  for (int i = 0; i < numGames; i++) {
+    picked.push_back(rand() % all.size());
+  }
+
+  std::ofstream out("trace.json");
+  out << "{\"games\":["<<std::endl;
+
+  for (int g = 0; g < picked.size(); g++) {
+    int idx = picked[g];
+
+    out << "{\"secret\":\"" << all[idx].toString() << "\",\"trace\":["<<endl;
+
+    bool first = true;
+
+    for (int t = 0; t < nextMovesList.size(); t++) {
+      CodewordT guess = all[nextMovesList[t][idx]];
+
+      auto s = all[idx].score(guess);
+      uint8_t b = (s.result >> 4) & 0x0F;
+      uint8_t w = s.result & 0x0F;
+
+      if (!first) out << ",";
+      first = false;
+
+      out << "{\"turn\":" << t
+          << ",\"guess\":\"" << guess.toString()
+          << "\",\"score\":{\"correct_positions\":" << (int)b
+          << ",\"wrong_positions\":" << (int)w << "}}" << endl;
+      if (guess==all[idx]) break;
+    }
+
+    out << "]}";
+
+    if (g + 1 != picked.size()) out << ",";
+    
+  }
+
+  out << "]}";
+}
 // Score all possible solutions against a given secret and compute subset sizes, which are the number of codewords per
 // score.
 template <typename SolverConfig, typename SubsetSizeT, typename CodewordT>
